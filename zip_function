@@ -1,0 +1,57 @@
+<?php
+/**
+ * 获取ZIP压缩文件内容列表
+ * @param [string] $file ZIP文件路径
+ * @param [string] $dir 需要列出的文件夹
+ * @param [bool] $subdir 是否列出子文件夹内容
+ * @param [callable] $callback 列出每一项时的回调函数
+ * @return [Array]
+ */
+function zip_list_content($file, $dir = null, $subdir = true, $callback = null)
+{
+    $zip = new ZipArchive();
+    if (!$zip->open($file)) {
+        return false;
+    }
+    $count = $zip->numFiles;
+    if ($dir) {
+        $dir = trim($dir, '/');
+    }
+
+    //if (is_callable($callback) $_callback = true; else $_callback = false;
+    $results = [];
+    for ($i = 0; $i < $count; $i++) {
+        $entry = $zip->statIndex($i, ZipArchive::FL_ENC_RAW);
+        $entry['name'] = rtrim(str_replace('\\', '/', $entry['name']), '/');
+        $encoding = mb_detect_encoding($entry['name'], array('Shift_JIS', 'EUC_JP', 'EUC_KR', 'KOI8-R', 'ASCII', 'GB2312', 'GBK', 'BIG5', 'UTF-8'));
+        $filename = iconv($encoding, 'UTF-8', $entry['name']);
+        $filename = $filename ?: $entry['name'];
+        $size = $entry['size'];
+        $comp_size = $entry['comp_size'];
+        $mtime = $entry['mtime'];
+        $crc = $entry['crc'];
+        $is_dir = ($crc == 0);
+        $path = '/' . $filename;
+        if ($dir and (stripos($filename, $dir) !== 0 or strtolower($filename) == strtolower($dir))) {
+            continue;
+        }
+
+        $_names = explode('/', $filename);
+        $_idx = count($_names) - 1;
+        if (!$subdir and $_idx != count(explode('/', $dir))) {
+            continue;
+        }
+
+        $name = $_names[$_idx];
+        $index = $i;
+        //$data = $zip->getFromIndex($i);
+        $entry = compact('name', 'path', 'size', 'comp_size', 'mtime', 'crc', 'index', 'is_dir');
+        $results[] = $entry;
+        if ($_callback) {
+            @call_user_func($callback, $entry, $index, $zip);
+        }
+
+    }
+    $zip->close();
+    return $results;
+}
